@@ -978,16 +978,20 @@ impl Pty {
                 .and_then(|pane| match pane {
                     PaneId::Plugin(plugin_id) => self.plugin_cwds.get(plugin_id).cloned(),
                     PaneId::Terminal(id) => {
-                        // Try to get CWD from OS, fall back to cached value
-                        self.id_to_child_pid
-                            .get(id)
-                            .and_then(|&pid| {
+                        // Prefer the cached CWD (kept fresh by OSC 7 and by
+                        // update_and_report_cwds); fall back to a live OS read.
+                        // On Windows with pwsh 7, Set-Location does not update
+                        // the process Win32 cwd, so the OS read is stale when
+                        // the shell has been navigated by hand — but OSC 7,
+                        // if emitted, has already populated the cache.
+                        self.terminal_cwds.get(id).cloned().or_else(|| {
+                            self.id_to_child_pid.get(id).and_then(|&pid| {
                                 self.bus
                                     .os_input
                                     .as_ref()
                                     .and_then(|input| input.get_cwd(pid))
                             })
-                            .or_else(|| self.terminal_cwds.get(id).cloned())
+                        })
                     },
                 })
         };
@@ -1000,16 +1004,15 @@ impl Pty {
         if cwd.is_none() {
             *cwd = match pane_id {
                 PaneId::Terminal(terminal_pane_id) => {
-                    // Try to get CWD from OS, fall back to cached value
-                    self.id_to_child_pid
-                        .get(terminal_pane_id)
-                        .and_then(|&pid| {
+                    // Prefer the cached CWD; fall back to a live OS read.
+                    self.terminal_cwds.get(terminal_pane_id).cloned().or_else(|| {
+                        self.id_to_child_pid.get(terminal_pane_id).and_then(|&pid| {
                             self.bus
                                 .os_input
                                 .as_ref()
                                 .and_then(|input| input.get_cwd(pid))
                         })
-                        .or_else(|| self.terminal_cwds.get(terminal_pane_id).cloned())
+                    })
                 },
                 PaneId::Plugin(plugin_id) => self.plugin_cwds.get(plugin_id).cloned(),
             };
@@ -2009,16 +2012,20 @@ impl Pty {
                 .and_then(|pane| match pane {
                     PaneId::Plugin(plugin_id) => self.plugin_cwds.get(plugin_id).cloned(),
                     PaneId::Terminal(id) => {
-                        // Try to get CWD from OS, fall back to cached value
-                        self.id_to_child_pid
-                            .get(id)
-                            .and_then(|&pid| {
+                        // Prefer the cached CWD (kept fresh by OSC 7 and by
+                        // update_and_report_cwds); fall back to a live OS read.
+                        // On Windows with pwsh 7, Set-Location does not update
+                        // the process Win32 cwd, so the OS read is stale when
+                        // the shell has been navigated by hand — but OSC 7,
+                        // if emitted, has already populated the cache.
+                        self.terminal_cwds.get(id).cloned().or_else(|| {
+                            self.id_to_child_pid.get(id).and_then(|&pid| {
                                 self.bus
                                     .os_input
                                     .as_ref()
                                     .and_then(|input| input.get_cwd(pid))
                             })
-                            .or_else(|| self.terminal_cwds.get(id).cloned())
+                        })
                     },
                 })
         };
@@ -2220,6 +2227,21 @@ impl Pty {
 
     pub fn notify_cwd_from_osc7(&mut self, terminal_id: u32, path: PathBuf) {
         use std::sync::atomic::Ordering;
+
+        {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(r"C:\Users\DAVEOWEN\zellij-cwd-debug.log")
+            {
+                let _ = writeln!(
+                    f,
+                    "[notify_cwd_from_osc7] term={} path={:?}",
+                    terminal_id, path
+                );
+            }
+        }
 
         if self.terminal_cwds.get(&terminal_id) != Some(&path) {
             let pane_id = PaneId::Terminal(terminal_id);
