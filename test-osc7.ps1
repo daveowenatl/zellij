@@ -17,4 +17,7 @@ function global:prompt {
 }
 
 Write-Host "OSC 7 prompt loaded. Launch zellij, cd somewhere, then Alt+n."
-Write-Host "Log will be written to C:\Users\DAVEOWEN\zellij-cwd-debug.log"
+$logPath = if ($env:ZELLIJ_CWD_DEBUG_LOG) { $env:ZELLIJ_CWD_DEBUG_LOG }
+          else { Join-Path $env:TEMP 'zellij-cwd-debug.log' }
+Write-Host "Log path: $logPath"
+Write-Host "  (override with `$env:ZELLIJ_CWD_DEBUG_LOG = '...' before launching zellij)"

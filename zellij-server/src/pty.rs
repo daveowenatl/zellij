@@ -2068,20 +2068,10 @@ impl Pty {
             .os_input
             .as_ref()
             .and_then(|os_input| os_input.get_cwd(child_pid));
-        {
-            use std::io::Write;
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(r"C:\Users\DAVEOWEN\zellij-cwd-debug.log")
-            {
-                let _ = writeln!(
-                    f,
-                    "[capture_initial_cwd] term={} child_pid={} -> {:?}",
-                    terminal_id, child_pid, result
-                );
-            }
-        }
+        crate::os_input_output::write_cwd_debug_log(format_args!(
+            "[capture_initial_cwd] term={} child_pid={} -> {:?}",
+            terminal_id, child_pid, result
+        ));
         if let Some(cwd) = result {
             self.terminal_cwds.insert(terminal_id, cwd);
         }
@@ -2150,20 +2140,10 @@ impl Pty {
             }
         }
 
-        {
-            use std::io::Write;
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(r"C:\Users\DAVEOWEN\zellij-cwd-debug.log")
-            {
-                let _ = writeln!(
-                    f,
-                    "[update_and_report_cwds] active_ids={:?} pids_to_cwds={:?} terminal_cwds={:?}",
-                    active_terminal_ids, pids_to_cwds, self.terminal_cwds
-                );
-            }
-        }
+        crate::os_input_output::write_cwd_debug_log(format_args!(
+            "[update_and_report_cwds] active_ids={:?} pids_to_cwds={:?} terminal_cwds={:?}",
+            active_terminal_ids, pids_to_cwds, self.terminal_cwds
+        ));
 
         let ppids_to_cmds = self
             .bus
@@ -2228,20 +2208,10 @@ impl Pty {
     pub fn notify_cwd_from_osc7(&mut self, terminal_id: u32, path: PathBuf) {
         use std::sync::atomic::Ordering;
 
-        {
-            use std::io::Write;
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(r"C:\Users\DAVEOWEN\zellij-cwd-debug.log")
-            {
-                let _ = writeln!(
-                    f,
-                    "[notify_cwd_from_osc7] term={} path={:?}",
-                    terminal_id, path
-                );
-            }
-        }
+        crate::os_input_output::write_cwd_debug_log(format_args!(
+            "[notify_cwd_from_osc7] term={} path={:?}",
+            terminal_id, path
+        ));
 
         if self.terminal_cwds.get(&terminal_id) != Some(&path) {
             let pane_id = PaneId::Terminal(terminal_id);

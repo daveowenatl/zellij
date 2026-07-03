@@ -35,6 +35,27 @@ use std::{
 
 pub use async_trait::async_trait;
 
+/// Append a line to the cwd-tracking debug log used by the cwd-debug branch.
+/// Path comes from $ZELLIJ_CWD_DEBUG_LOG or defaults to a file in the OS
+/// temp dir. Errors are silently ignored — this is best-effort instrumentation.
+pub(crate) fn write_cwd_debug_log(args: std::fmt::Arguments<'_>) {
+    use std::io::Write;
+    let path = std::env::var_os("ZELLIJ_CWD_DEBUG_LOG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            let mut p = std::env::temp_dir();
+            p.push("zellij-cwd-debug.log");
+            p
+        });
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let _ = writeln!(f, "{}", args);
+    }
+}
+
 /// Check whether a candidate path refers to an executable file, considering
 /// PATHEXT extensions on Windows (e.g. `.exe`, `.cmd`).
 fn find_executable(candidate: &std::path::Path) -> Option<PathBuf> {
@@ -506,16 +527,7 @@ impl ServerOsApi for ServerOsInputOutput {
         } else {
             None
         };
-        {
-            use std::io::Write;
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(r"C:\Users\DAVEOWEN\zellij-cwd-debug.log")
-            {
-                let _ = writeln!(f, "[get_cwd] pid={} -> {:?}", pid, result);
-            }
-        }
+        write_cwd_debug_log(format_args!("[get_cwd] pid={} -> {:?}", pid, result));
         result
     }
 
