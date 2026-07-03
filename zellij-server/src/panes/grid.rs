@@ -3524,6 +3524,15 @@ impl Perform for Grid {
             return;
         }
 
+        // Diagnostic: log every OSC command header + first param so we can see
+        // what actually reaches the grid parser from the shell via ConPTY.
+        crate::os_input_output::write_cwd_debug_log(format_args!(
+            "[osc_dispatch] cmd={:?} param1={:?} n_params={}",
+            String::from_utf8_lossy(params[0]),
+            params.get(1).map(|p| String::from_utf8_lossy(p).into_owned()),
+            params.len()
+        ));
+
         match params[0] {
             // Set window title.
             b"0" | b"2" => {
