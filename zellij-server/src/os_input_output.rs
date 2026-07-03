@@ -501,12 +501,22 @@ impl ServerOsApi for ServerOsInputOutput {
             refresh_kind,
         );
 
-        if let Some(process) = system_info.process(sysinfo_pid) {
-            if let Some(cwd) = process.cwd() {
-                return Some(cwd.to_path_buf());
+        let result = if let Some(process) = system_info.process(sysinfo_pid) {
+            process.cwd().map(|cwd| cwd.to_path_buf())
+        } else {
+            None
+        };
+        {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(r"C:\Users\DAVEOWEN\zellij-cwd-debug.log")
+            {
+                let _ = writeln!(f, "[get_cwd] pid={} -> {:?}", pid, result);
             }
         }
-        None
+        result
     }
 
     fn get_cwds(&self, pids: Vec<u32>) -> (HashMap<u32, PathBuf>, HashMap<u32, Vec<String>>) {

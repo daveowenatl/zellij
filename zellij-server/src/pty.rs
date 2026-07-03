@@ -2056,10 +2056,27 @@ impl Pty {
         Ok(())
     }
     fn capture_initial_cwd(&mut self, terminal_id: u32, child_pid: u32) {
-        if let Some(os_input) = self.bus.os_input.as_ref() {
-            if let Some(cwd) = os_input.get_cwd(child_pid) {
-                self.terminal_cwds.insert(terminal_id, cwd);
+        let result = self
+            .bus
+            .os_input
+            .as_ref()
+            .and_then(|os_input| os_input.get_cwd(child_pid));
+        {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(r"C:\Users\DAVEOWEN\zellij-cwd-debug.log")
+            {
+                let _ = writeln!(
+                    f,
+                    "[capture_initial_cwd] term={} child_pid={} -> {:?}",
+                    terminal_id, child_pid, result
+                );
             }
+        }
+        if let Some(cwd) = result {
+            self.terminal_cwds.insert(terminal_id, cwd);
         }
     }
 
@@ -2123,6 +2140,21 @@ impl Pty {
             let cmd = process_id.and_then(|pid| pids_to_cmds.get(pid));
             if let Some(cmd) = cmd {
                 self.terminal_cmds.insert(*terminal_id, cmd.clone());
+            }
+        }
+
+        {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(r"C:\Users\DAVEOWEN\zellij-cwd-debug.log")
+            {
+                let _ = writeln!(
+                    f,
+                    "[update_and_report_cwds] active_ids={:?} pids_to_cwds={:?} terminal_cwds={:?}",
+                    active_terminal_ids, pids_to_cwds, self.terminal_cwds
+                );
             }
         }
 
