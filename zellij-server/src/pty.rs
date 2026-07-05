@@ -978,16 +978,21 @@ impl Pty {
                 .and_then(|pane| match pane {
                     PaneId::Plugin(plugin_id) => self.plugin_cwds.get(plugin_id).cloned(),
                     PaneId::Terminal(id) => {
-                        // Try to get CWD from OS, fall back to cached value
-                        self.id_to_child_pid
-                            .get(id)
-                            .and_then(|&pid| {
+                        // Prefer the cached CWD (kept fresh by OSC 7 and by
+                        // update_and_report_cwds); fall back to a live OS read.
+                        // On Windows with PowerShell, Set-Location does not
+                        // update the process Win32 cwd, so sysinfo returns
+                        // the spawn dir even after the user cd's. The cache,
+                        // populated by OSC 7 when the shell emits it, is the
+                        // accurate value for that case.
+                        self.terminal_cwds.get(id).cloned().or_else(|| {
+                            self.id_to_child_pid.get(id).and_then(|&pid| {
                                 self.bus
                                     .os_input
                                     .as_ref()
                                     .and_then(|input| input.get_cwd(pid))
                             })
-                            .or_else(|| self.terminal_cwds.get(id).cloned())
+                        })
                     },
                 })
         };
@@ -1000,16 +1005,15 @@ impl Pty {
         if cwd.is_none() {
             *cwd = match pane_id {
                 PaneId::Terminal(terminal_pane_id) => {
-                    // Try to get CWD from OS, fall back to cached value
-                    self.id_to_child_pid
-                        .get(terminal_pane_id)
-                        .and_then(|&pid| {
+                    // Prefer the cached CWD; fall back to a live OS read.
+                    self.terminal_cwds.get(terminal_pane_id).cloned().or_else(|| {
+                        self.id_to_child_pid.get(terminal_pane_id).and_then(|&pid| {
                             self.bus
                                 .os_input
                                 .as_ref()
                                 .and_then(|input| input.get_cwd(pid))
                         })
-                        .or_else(|| self.terminal_cwds.get(terminal_pane_id).cloned())
+                    })
                 },
                 PaneId::Plugin(plugin_id) => self.plugin_cwds.get(plugin_id).cloned(),
             };
@@ -2009,16 +2013,21 @@ impl Pty {
                 .and_then(|pane| match pane {
                     PaneId::Plugin(plugin_id) => self.plugin_cwds.get(plugin_id).cloned(),
                     PaneId::Terminal(id) => {
-                        // Try to get CWD from OS, fall back to cached value
-                        self.id_to_child_pid
-                            .get(id)
-                            .and_then(|&pid| {
+                        // Prefer the cached CWD (kept fresh by OSC 7 and by
+                        // update_and_report_cwds); fall back to a live OS read.
+                        // On Windows with PowerShell, Set-Location does not
+                        // update the process Win32 cwd, so sysinfo returns
+                        // the spawn dir even after the user cd's. The cache,
+                        // populated by OSC 7 when the shell emits it, is the
+                        // accurate value for that case.
+                        self.terminal_cwds.get(id).cloned().or_else(|| {
+                            self.id_to_child_pid.get(id).and_then(|&pid| {
                                 self.bus
                                     .os_input
                                     .as_ref()
                                     .and_then(|input| input.get_cwd(pid))
                             })
-                            .or_else(|| self.terminal_cwds.get(id).cloned())
+                        })
                     },
                 })
         };
