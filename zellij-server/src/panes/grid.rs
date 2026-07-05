@@ -376,6 +376,14 @@ pub fn parse_osc7_path(raw: &[u8]) -> Option<std::path::PathBuf> {
         }
     }
     let decoded = String::from_utf8(out).ok()?;
+    // `file://host/C:/Users/foo` and `file:///C:/Users/foo` both parse to
+    // "/C:/Users/foo". The leading slash is a URL artifact, not part of
+    // the OS path. On Windows the drive-letter path must not begin with
+    // "/" or the OS spawn/chdir will reject it. Strip the artifact.
+    let b = decoded.as_bytes();
+    if b.len() >= 3 && b[0] == b'/' && b[1].is_ascii_alphabetic() && b[2] == b':' {
+        return Some(std::path::PathBuf::from(&decoded[1..]));
+    }
     Some(std::path::PathBuf::from(decoded))
 }
 
@@ -5005,6 +5013,25 @@ mod osc7_parser_tests {
     #[test]
     fn osc7_parser_rejects_missing_scheme() {
         assert_eq!(parse_osc7_path(b"/home/user"), None);
+    }
+
+    #[test]
+    fn osc7_parser_strips_url_slash_before_windows_drive_letter() {
+        // `file://host/C:/...` -- hostname form
+        assert_eq!(
+            parse_osc7_path(b"file://host/C:/Users/name/src"),
+            Some(PathBuf::from("C:/Users/name/src"))
+        );
+        // `file:///C:/...` -- RFC 8089 empty-host form
+        assert_eq!(
+            parse_osc7_path(b"file:///D:/some/path"),
+            Some(PathBuf::from("D:/some/path"))
+        );
+        // Unix paths unaffected -- no drive letter, no strip
+        assert_eq!(
+            parse_osc7_path(b"file://host/home/user"),
+            Some(PathBuf::from("/home/user"))
+        );
     }
 
     #[test]
