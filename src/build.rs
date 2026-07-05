@@ -4,7 +4,11 @@ fn main() {
     // default 1 MB main-thread stack.  Increase it to 8 MB to match Linux.
     // Release builds optimize the frame down, so this is only needed for non-release profiles.
     if cfg!(target_os = "windows") && std::env::var("PROFILE").unwrap_or_default() != "release" {
-        println!("cargo:rustc-link-arg=/STACK:8388608");
+        if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+            println!("cargo:rustc-link-arg=/STACK:8388608");
+        } else {
+            println!("cargo:rustc-link-arg=-Wl,--stack,8388608");
+        }
     }
 
     // Embed the application icon into the Windows executable.
