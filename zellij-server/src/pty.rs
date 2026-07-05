@@ -13,7 +13,10 @@ use crate::{
     ClientId, ServerInstruction,
 };
 use std::sync::Arc;
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 use tokio::task::JoinHandle;
 use zellij_utils::{
     data::{
@@ -204,6 +207,13 @@ pub(crate) struct Pty {
     post_command_discovery_hook: Option<String>,
     plugin_cwds: HashMap<u32, PathBuf>,   // plugin_id -> cwd
     terminal_cwds: HashMap<u32, PathBuf>, // terminal_id -> cwd
+    // Set of terminal_ids that have ever emitted OSC 7. Once a shell has
+    // demonstrated it reports its own cwd via OSC 7, sysinfo is barred from
+    // overwriting terminal_cwds for that pane in update_and_report_cwds.
+    // This is needed for shells like PowerShell where `cd` does not sync
+    // to the process Win32 cwd, so sysinfo (which reads the Win32 cwd) is
+    // stale as soon as the user navigates.
+    terminal_osc7_seen: HashSet<u32>,
     pane_activity_flags: HashMap<u32, std::sync::Arc<std::sync::atomic::AtomicBool>>,
     terminal_cmds: HashMap<u32, Vec<String>>,
     terminal_foreground_cmds: HashMap<u32, Vec<String>>,
@@ -922,6 +932,7 @@ impl Pty {
             post_command_discovery_hook,
             plugin_cwds: HashMap::new(),
             terminal_cwds: HashMap::new(),
+            terminal_osc7_seen: HashSet::new(),
             pane_activity_flags: HashMap::new(),
             terminal_cmds: HashMap::new(),
             terminal_foreground_cmds: HashMap::new(),
@@ -1819,6 +1830,7 @@ impl Pty {
                 }
                 self.pane_activity_flags.remove(&id);
                 self.terminal_cwds.remove(&id);
+                self.terminal_osc7_seen.remove(&id);
                 self.terminal_cmds.remove(&id);
                 self.terminal_foreground_cmds.remove(&id);
                 self.bus
@@ -2105,6 +2117,12 @@ impl Pty {
             .unwrap_or_default();
 
         for terminal_id in &active_terminal_ids {
+            // Once a terminal's shell has demonstrated it emits OSC 7, we
+            // treat the shell as authoritative and stop overwriting
+            // terminal_cwds from sysinfo. See terminal_osc7_seen.
+            if self.terminal_osc7_seen.contains(terminal_id) {
+                continue;
+            }
             let process_id = self.id_to_child_pid.get(terminal_id);
             let cwd = process_id.and_then(|pid| pids_to_cwds.get(pid));
 
@@ -2197,6 +2215,11 @@ impl Pty {
 
     pub fn notify_cwd_from_osc7(&mut self, terminal_id: u32, path: PathBuf) {
         use std::sync::atomic::Ordering;
+
+        // Mark this terminal as one whose shell reports its own cwd. From
+        // here on, update_and_report_cwds will not overwrite terminal_cwds
+        // for this id from sysinfo.
+        self.terminal_osc7_seen.insert(terminal_id);
 
         if self.terminal_cwds.get(&terminal_id) != Some(&path) {
             let pane_id = PaneId::Terminal(terminal_id);
